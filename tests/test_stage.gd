@@ -51,26 +51,61 @@ func test_적이_생기고_몸_공격이_맞혀_쓰러뜨림() -> void:
 	var e: Enemy = enemies[0]
 	e.target = null  # 적이 움직이지 않게 고정
 	e.position = stage.player.position + Vector2(100, 0)  # 근접 사거리 안
-	for i in 240:  # 시간을 흘려 몸 공격을 맞힘 (적 hp 3, 피해 2 → 2번)
-		await wait_frames()
+	stage.player.set_process(false)  # 시간을 직접 흘려 결과를 고정
+	for i in 400:  # 몸 공격을 맞힘 (적 hp 3, 피해 2 → 2번)
+		stage.player._process(1.0 / 60.0)
 		if not is_instance_valid(e) or e.is_queued_for_deletion():
 			break
 	assert_true(not is_instance_valid(e) or e.is_queued_for_deletion(), "적이 쓰러짐 (hp 3, 몸 공격 피해 2 → 2번)")
 	stage.queue_free()
 
 
-func test_덮칠_때_몸이_적_방향으로_늘어나고_얼굴이_그쪽을_봄() -> void:
+func test_적을_삼키면_숨고_몸_안에_비치고_뱉으면_살아서_돌아옴() -> void:
 	var stage := _make_stage()
 	await wait_frames()
 	var e: Enemy = get_tree().get_nodes_in_group("enemies")[0]
 	e.target = null
-	e.position = stage.player.position + Vector2(150, -Balance.BODY_CENTER_Y)  # 몸 중심 높이, 사거리 끝 가까이
-	var longest := 0.0
-	for i in 60:
+	e.position = stage.player.position + Vector2(150, -Balance.BODY_CENTER_Y)  # 몸 중심 높이, 사거리 안
+	var saw_swallow := false
+	var saw_wrap := false
+	var min_hp := e.hp
+	for i in 200:
 		await wait_frames()
-		longest = maxf(longest, stage.player._rig.transform.x.length())
-	assert_true(longest > 1.4, "오른쪽 적을 향해 가로로 늘어남 %f" % longest)
+		if e.swallowed:
+			saw_swallow = true
+			assert_true(not e.visible, "삼켜진 동안 숨음")
+			assert_not_null(stage.player._fx, "몸 안에 비추는 연출 부품이 생김")
+		saw_wrap = saw_wrap or stage.player._frame_sprite.visible and stage.player._frame_sprite.texture == Player.FRAMES[BitePose.Frame.WRAP]
+		min_hp = mini(min_hp, e.hp)
+		if saw_swallow and not e.swallowed:
+			break
+	assert_true(saw_swallow and saw_wrap, "삼키고 감쌈 프레임을 씀")
+	assert_eq(e.hp, Balance.ENEMY_HP - Balance.MELEE_DAMAGE, "피해 한 번")
+	assert_true(e.visible and not e.swallowed, "뱉어져 다시 보임")
 	assert_true(stage.player._face.look.x > 0.9, "얼굴이 적 쪽(오른쪽)을 봄")
+	stage.queue_free()
+
+
+func test_삼킨_적이_죽으면_뱉지_않고_소화되어_사라짐() -> void:
+	var stage := _make_stage()
+	await wait_frames()
+	var e: Enemy = get_tree().get_nodes_in_group("enemies")[0]
+	e.target = null
+	e.hp = Balance.MELEE_DAMAGE  # 한 입에 죽음
+	e.position = stage.player.position + Vector2(0, -Balance.BODY_CENTER_Y - 150)  # 위쪽
+	var min_digest_scale := 1.0
+	stage.player.set_process(false)
+	for i in 200:
+		stage.player._process(1.0 / 60.0)
+		if stage.player._fx != null:
+			min_digest_scale = minf(min_digest_scale, Swallow.digest_scale(stage.player._fx.digest))
+		if not is_instance_valid(e):
+			break
+	assert_true(not is_instance_valid(e) or e.is_queued_for_deletion(), "적이 사라짐")
+	assert_true(min_digest_scale < 0.5, "몸 안에서 작아지며 소화됨 %f" % min_digest_scale)
+	for i in 80:
+		stage.player._process(1.0 / 60.0)
+	assert_true(stage.player._fx == null, "연출 부품이 정리됨")
 	stage.queue_free()
 
 

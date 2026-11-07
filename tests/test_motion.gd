@@ -1,22 +1,23 @@
 extends TestCase
-## 몸 공격의 시간 흐름(AttackCycle), 덮치기 모양(LungePose), 슬라임 모션(SlimeMotion), 얼굴(SlimeFace), 부채꼴 판정을 확인한다.
+## 몸 공격의 시간 흐름(AttackCycle), 한 입에 삼키기 모양(BitePose)·삼키는 연출(Swallow), 슬라임 모션(SlimeMotion), 얼굴(SlimeFace), 방향 맞추기를 확인한다.
 
 const DT := 1.0 / 60.0
 
 
-func test_공격_단계가_준비_타격_복귀_쿨다운_순서로_돈다() -> void:
+func test_공격_단계가_준비_입벌림_감쌈_복귀_쿨다운_순서로_돈다() -> void:
 	var c := AttackCycle.new()
 	assert_eq(c.phase, AttackCycle.Phase.IDLE)
 	var seen: Array = []
 	var hits := 0
-	for i in 120:
+	for i in 180:
 		if c.update(DT, true):
 			hits += 1
 		if seen.is_empty() or seen[-1] != c.phase:
 			seen.append(c.phase)
-	assert_eq(seen.slice(0, 5), [AttackCycle.Phase.WINDUP, AttackCycle.Phase.STRIKE, AttackCycle.Phase.RECOVER, AttackCycle.Phase.IDLE, AttackCycle.Phase.WINDUP])
-	# 2초 동안: 한 바퀴 0.95초, 첫 타격 약 0.38초 → 0.38, 1.33초에 2번 타격
-	assert_eq(hits, 2, "한 단계에 타격은 한 번")
+	var P := AttackCycle.Phase
+	assert_eq(seen.slice(0, 6), [P.WINDUP, P.OPEN, P.ENGULF, P.RECOVER, P.IDLE, P.WINDUP])
+	# 한 바퀴 1.3초: 첫 피해 0.22+0.2+0.14=0.56초, 두 번째 1.86초 → 3초 동안 2번
+	assert_eq(hits, 2, "한 바퀴에 피해는 한 번")
 
 
 func test_대상이_없으면_공격을_시작하지_않음() -> void:
@@ -26,23 +27,18 @@ func test_대상이_없으면_공격을_시작하지_않음() -> void:
 	assert_eq(c.phase, AttackCycle.Phase.IDLE)
 
 
-func test_타격은_타격_단계_중간에_한_번만() -> void:
+func test_피해는_감싸는_단계에서만_한_번_그리고_감싸기_시작이_알려짐() -> void:
 	var c := AttackCycle.new()
 	var hit_phase := -1
-	for i in 120:
-		if c.update(DT, true):
+	var engulf_enters := 0
+	for i in 75:  # 한 바퀴(1.3초) 안
+		var landed := c.update(DT, true)
+		if c.entered == AttackCycle.Phase.ENGULF:
+			engulf_enters += 1
+		if landed and hit_phase == -1:
 			hit_phase = c.phase
-			break
-	assert_eq(hit_phase, AttackCycle.Phase.STRIKE)
-
-
-func test_부채꼴_판정() -> void:
-	var arc := deg_to_rad(55.0)
-	assert_true(Targeting.in_cone(Vector2.ZERO, Vector2.RIGHT, Vector2(100, 0), 130.0, arc), "정면")
-	assert_true(Targeting.in_cone(Vector2.ZERO, Vector2.RIGHT, Vector2(80, 80), 130.0, arc), "45도")
-	assert_true(not Targeting.in_cone(Vector2.ZERO, Vector2.RIGHT, Vector2(0, 100), 130.0, arc), "90도 밖")
-	assert_true(not Targeting.in_cone(Vector2.ZERO, Vector2.RIGHT, Vector2(200, 0), 130.0, arc), "거리 밖")
-	assert_true(not Targeting.in_cone(Vector2.ZERO, Vector2.RIGHT, Vector2(-100, 0), 130.0, arc), "뒤쪽")
+	assert_eq(hit_phase, AttackCycle.Phase.ENGULF)
+	assert_eq(engulf_enters, 1, "감싸기 시작은 한 번만 알려짐")
 
 
 func test_가만히_있으면_숨쉬듯_조금_늘었다_줄어듦() -> void:
@@ -151,45 +147,64 @@ func test_이동하면_진행_방향으로_기울고_머리_곡선은_반대로_
 	assert_true(absf(m.lean()) < 0.01 and absf(m.crest_shear()) < 0.01, "멈추면 곧게 복귀")
 
 
-func test_덮치기_두_안_모두_웅크림_늘어남_눌림_복귀_순서() -> void:
-	for st in [Balance.STYLE_STRETCH, Balance.STYLE_HOP]:
-		LungePose.style = st
-		var peak := LungePose.peak_for(Vector2.RIGHT)
-		var crouch := LungePose.pose(AttackCycle.Phase.WINDUP, 1.0, peak)
-		assert_true(crouch.x < 0.95 and crouch.y < 0.0, "웅크리며 뒤로 물러남 %s (안 %d)" % [crouch, st])
-		assert_eq(LungePose.pose(AttackCycle.Phase.STRIKE, 0.0, peak), crouch, "웅크림에서 이어짐")
-		assert_eq(LungePose.pose(AttackCycle.Phase.STRIKE, 1.0, peak), peak, "타격 끝에 최대")
-		assert_eq(LungePose.pose(AttackCycle.Phase.RECOVER, 0.0, peak), peak, "복귀는 최대에서 시작")
-		var lowest := 9.0
-		for i in 101:
-			lowest = minf(lowest, LungePose.pose(AttackCycle.Phase.RECOVER, i / 100.0, peak).x)
-		assert_true(lowest < 0.95 and lowest > 0.7, "닿은 뒤 살짝 눌림 %f" % lowest)
-		var end := LungePose.pose(AttackCycle.Phase.RECOVER, 1.0, peak)
-		assert_true(is_equal_approx(end.x, 1.0) and is_equal_approx(end.y, 0.0), "제자리로 복귀")
-		assert_eq(LungePose.pose(AttackCycle.Phase.IDLE, 0.0, peak), Vector2(1, 0))
-	LungePose.style = Balance.ATTACK_STYLE
+func test_프레임은_웅크림_벌림_감쌈_뱉기_순서로_바뀜() -> void:
+	var P := AttackCycle.Phase
+	var F := BitePose.Frame
+	assert_eq(BitePose.frame(P.IDLE, 0.0), F.BODY)
+	assert_eq(BitePose.frame(P.WINDUP, 1.0), F.BODY, "웅크림은 평소 몸")
+	assert_eq(BitePose.frame(P.OPEN, 0.0), F.OPEN_A)
+	assert_eq(BitePose.frame(P.OPEN, 1.0), F.OPEN_B)
+	assert_eq(BitePose.frame(P.ENGULF, 0.5), F.WRAP)
+	assert_eq(BitePose.frame(P.RECOVER, 0.0), F.OPEN_B, "뱉을 때 입이 벌어짐")
+	assert_eq(BitePose.frame(P.RECOVER, 1.0), F.BODY, "끝에서 평소 몸")
 
 
-func test_두_안_모두_앞쪽_끝이_사거리_끝의_적에게_닿고_옆은_가늘어짐() -> void:
-	for st in [Balance.STYLE_STRETCH, Balance.STYLE_HOP]:
-		LungePose.style = st
-		for dir: Vector2 in [Vector2.RIGHT, Vector2.LEFT, Vector2.UP, Vector2.DOWN, Vector2(1, 1).normalized(), Vector2(-1, -2).normalized()]:
-			var peak := LungePose.peak_for(dir)
-			var t := LungePose.transform(dir, peak.x, peak.y)
-			var r := LungePose.body_radius(dir)
-			var tip := (t * (dir * r)).dot(dir)
-			assert_true(absf(tip - Balance.LUNGE_TIP_DOTS) < 0.5, "앞쪽 끝이 목표에 닿음 안%d %s: %f" % [st, dir, tip])
-			assert_true(tip * 3.0 >= Balance.MELEE_RANGE - Balance.ENEMY_RADIUS, "사거리 끝 적의 가장자리까지 닿음")
-			var back := LungePose.transform(dir, peak.x, 0.0) * (-dir * r)
-			assert_true(back.distance_to(-dir * r) < 0.001, "밀림 없이 늘어나면 뒤쪽 끝 고정")
-			assert_true(LungePose.width(peak.x) < 1.0 and t.determinant() > 0.0, "옆은 가늘어지고 뒤집히지 않음")
-	assert_true(is_equal_approx(LungePose.width(1.0), 1.0), "안 늘어나면 그대로")
-	LungePose.style = Balance.STYLE_STRETCH
-	assert_true(LungePose.peak_for(Vector2.RIGHT).x <= Balance.A_MAX_STRETCH + 0.001, "안 A: 늘어남 상한")
-	LungePose.style = Balance.STYLE_HOP
-	var hop_px := LungePose.peak_for(Vector2.RIGHT).y * 3.0
-	assert_true(hop_px >= 60.0 and hop_px <= 80.0, "안 B: 튀어나가는 거리 60~80픽셀 %f" % hop_px)
-	LungePose.style = Balance.ATTACK_STYLE
+func test_몸은_물러났다가_적에게_닿고_제자리로_돌아옴() -> void:
+	var P := AttackCycle.Phase
+	var reach := 150.0
+	assert_true(BitePose.travel(P.WINDUP, 1.0, reach) < -5.0, "웅크리며 뒤로 물러남")
+	assert_eq(BitePose.travel(P.OPEN, 0.0, reach), BitePose.travel(P.WINDUP, 1.0, reach), "웅크림에서 이어짐")
+	assert_true(is_equal_approx(BitePose.travel(P.OPEN, 1.0, reach), reach * Balance.BITE_OPEN_REACH), "입 벌림이 끝나면 일부만 다가감")
+	assert_true(is_equal_approx(BitePose.travel(P.ENGULF, 1.0, reach), reach), "감싸면 적 위치까지 감")
+	assert_true(is_equal_approx(BitePose.travel(P.ENGULF, 0.0, reach), BitePose.travel(P.OPEN, 1.0, reach)), "입 벌림에서 이어짐")
+	assert_true(is_equal_approx(BitePose.travel(P.RECOVER, 0.0, reach), reach), "복귀는 적 위치에서 시작")
+	assert_true(is_equal_approx(BitePose.travel(P.RECOVER, 1.0, reach), 0.0), "제자리로 복귀")
+	assert_eq(BitePose.squash(P.IDLE, 0.0, 0.0), Vector2.ONE)
+	assert_true(BitePose.squash(P.WINDUP, 1.0, 0.0).y < 0.9, "웅크리면 낮아짐")
+	assert_true(BitePose.squash(P.OPEN, 1.0, 0.0).y > 1.05, "솟으면 길어짐")
+	assert_true(is_equal_approx(BitePose.squash(P.RECOVER, 1.0, 0.0).x, 1.0), "복귀하면 원래 크기")
+
+
+func test_입_프레임_방향은_좌우_뒤집기와_45도_회전() -> void:
+	var right := Vector2.RIGHT
+	for dir: Vector2 in [Vector2.RIGHT, Vector2.LEFT, Vector2.UP, Vector2.DOWN, Vector2(1, 1).normalized(), Vector2(-1, -1).normalized(), Vector2(-1, 1).normalized()]:
+		var out := BitePose.direction(dir) * right
+		assert_true(out.dot(dir) > 0.92, "입이 적 쪽을 향함 %s → %s" % [dir, out])
+	assert_eq(BitePose.direction(Vector2.RIGHT), Transform2D.IDENTITY, "오른쪽은 그대로")
+	assert_true(BitePose.direction(Vector2.LEFT).determinant() < 0.0, "왼쪽은 뒤집기")
+	var slight := BitePose.direction(Vector2.from_angle(deg_to_rad(10))) * right
+	assert_true(slight.is_equal_approx(Vector2.RIGHT), "10도 정도는 정면으로 맞춤")
+
+
+func test_삼키는_연출은_줄어들고_소화되어_정확히_사라짐() -> void:
+	assert_eq(Swallow.inner_scale(0.0), 1.0)
+	assert_true(is_equal_approx(Swallow.inner_scale(1.0), Balance.SWALLOW_INNER_SCALE), "몸 안에서 작게 보임")
+	assert_true(Swallow.inner_scale(0.5) < 1.0 and Swallow.inner_scale(0.5) > Balance.SWALLOW_INNER_SCALE)
+	assert_eq(Swallow.digest_scale(0.0), 1.0)
+	assert_eq(Swallow.digest_scale(1.0), 0.0, "소화가 끝나면 크기 0")
+	var prev := 2.0
+	for i in 11:
+		var s := Swallow.digest_scale(i / 10.0)
+		assert_true(s < prev, "계속 작아짐")
+		prev = s
+	assert_true(Swallow.alpha(1.0) < Swallow.alpha(0.0), "소화될수록 옅어짐")
+	var lo := 0.0
+	var hi := 0.0
+	for i in 200:
+		var w := Swallow.wobble(i * DT)
+		lo = minf(lo, w)
+		hi = maxf(hi, w)
+	assert_true(hi > Balance.SWALLOW_WOBBLE * 0.9 and lo < -Balance.SWALLOW_WOBBLE * 0.9, "꿀럭이며 양쪽으로 출렁")
 
 
 func test_얼굴은_가는_방향으로_쏠리고_위를_보면_눈이_작아짐() -> void:
@@ -215,7 +230,7 @@ func test_공격_준비_안에_얼굴이_대상_쪽으로_돌아감() -> void:
 	var dir := Vector2.from_angle(deg_to_rad(-30))
 	for i in roundi(Balance.ATTACK_WINDUP / DT):
 		f.update(DT, dir)
-	assert_true(f.look.dot(dir) > 0.97, "준비가 끝나기 전에 얼굴이 대상을 봄 %f" % f.look.dot(dir))
+	assert_true(f.look.dot(dir) > 0.93, "준비가 끝나면 얼굴이 대상 쪽으로 거의 돌아감 %f" % f.look.dot(dir))
 
 
 func test_피격_충격은_납작하게_찌그러뜨리고_돌아옴() -> void:

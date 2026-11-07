@@ -97,6 +97,82 @@ def split_slime(full: np.ndarray) -> None:
         save(Image.fromarray(arr), OUT / f"{name}.png")
 
 
+# 한 입에 삼키기 프레임 (v0.1.5): 오른쪽을 보는 기준 그림. 왼쪽은 좌우 뒤집기, 위·아래·대각은 게임에서 회전한다.
+BITE = 56  # 프레임 한 변 (도트). 몸 중심이 (28, 28)
+MOUTH_DARK = (0x14, 0x03, 0x1F, 255)
+TONGUE = (0xC0, 0x40, 0x8F, 255)
+
+
+def _bite_canvas(parts, cavity=None, teeth=(), eyes=(), window=None, drips=()):
+    """parts: 몸을 이루는 타원 상자들. cavity: 입 안(어두운 타원). teeth: 이빨 삼각형 점 3개씩. eyes: 눈 위치."""
+    pal = {k: (*v, 255) for k, v in SLIME_PAL.items()}
+    solid = Image.new("L", (BITE, BITE), 0)
+    d = ImageDraw.Draw(solid)
+    for box in parts:
+        d.ellipse(box, fill=255)
+    for x, y, h in drips:  # 아래로 흘러내리는 점액
+        d.rectangle((x, y, x + 1, y + h), fill=255)
+    if cavity:
+        d.ellipse(cavity, fill=0)
+    img = Image.new("RGBA", (BITE, BITE), (0, 0, 0, 0))
+    img.paste(Image.new("RGBA", (BITE, BITE), pal["body"]), mask=solid)
+    di = ImageDraw.Draw(img)
+    if cavity:
+        # 입 안: 몸 안쪽 경계는 살려 두려고 몸 마스크와 겹치는 곳만 칠하지 않고, 어두운 안쪽을 따로 칠한다
+        inner = Image.new("L", (BITE, BITE), 0)
+        ImageDraw.Draw(inner).ellipse(cavity, fill=255)
+        img.paste(Image.new("RGBA", (BITE, BITE), MOUTH_DARK), mask=inner)
+        cx0, cy0, cx1, cy1 = cavity
+        di.ellipse((cx0 + 4, cy1 - 9, cx1 - 6, cy1 + 1), fill=TONGUE)  # 혀
+        for tri in teeth:
+            di.polygon(tri, fill=pal["white"])
+    # 하이라이트(왼쪽 위)와 어두운 아랫면
+    a = np.array(img)
+    ys, xs = np.where(a[:, :, 3] > 0)
+    top, left = ys.min(), xs.min()
+    for y, x in zip(ys, xs):
+        if tuple(a[y, x][:3]) == SLIME_PAL["body"] and ((x - left) + (y - top) < 9):
+            a[y, x] = (*SLIME_PAL["light"], 255)
+    img = Image.fromarray(a)
+    di = ImageDraw.Draw(img)
+    if window:  # 감싼 몸 안의 비치는 창 (적이 보이는 곳)
+        di.ellipse(window, fill=(*SLIME_PAL["dark"], 255))
+    for x, y in eyes:  # 눈: 흰색 + 모양
+        di.rectangle((x, y + 1, x + 2, y + 1), fill=pal["white"])
+        di.rectangle((x + 1, y, x + 1, y + 2), fill=pal["white"])
+    out = outline(img, SLIME_PAL["outline"])
+    canvas = Image.new("RGBA", (BITE, BITE), (0, 0, 0, 0))
+    canvas.paste(out, (-1, -1))
+    return canvas
+
+
+def make_bite_frames() -> None:
+    # 1) 솟으며 입이 벌어지기 시작: 앞쪽이 갈라지는 좁은 입
+    a = _bite_canvas(
+        parts=[(15, 8, 41, 46), (28, 11, 46, 25), (28, 29, 46, 43)],
+        cavity=(30, 21, 46, 34),
+        teeth=[((32, 21), (35, 21), (33, 25)), ((38, 21), (41, 21), (39, 25)),
+               ((33, 34), (36, 34), (35, 30)), ((39, 34), (42, 34), (40, 30))],
+        eyes=[(19, 14), (26, 12)])
+    save(a, OUT / "slime_bite_a.png")
+    # 2) 입이 크게 벌어지고 이빨이 보임
+    b = _bite_canvas(
+        parts=[(12, 8, 38, 48), (24, 5, 53, 25), (24, 31, 53, 51)],
+        cavity=(27, 15, 52, 41),
+        teeth=[((29, 15), (33, 15), (31, 21)), ((36, 15), (40, 15), (38, 21)), ((43, 16), (47, 16), (45, 22)),
+               ((30, 41), (34, 41), (32, 35)), ((37, 41), (41, 41), (39, 35)), ((44, 40), (48, 40), (46, 34))],
+        eyes=[(15, 14), (23, 10)])
+    save(b, OUT / "slime_bite_b.png")
+    # 3) 적 위로 덮쳐 감쌈: 넓고 낮은 돔. 가운데 창에 적이 비친다. 위쪽에 눈과 이빨
+    w = _bite_canvas(
+        parts=[(7, 10, 49, 49), (11, 6, 45, 30)],
+        window=(15, 19, 41, 43),
+        teeth=[((21, 22), (24, 22), (22, 25)), ((26, 22), (29, 22), (27, 25)), ((31, 22), (34, 22), (32, 25))],
+        eyes=[(18, 12), (35, 12)],
+        drips=[(10, 49, 3), (24, 49, 2), (40, 49, 4)])
+    save(w, OUT / "slime_wrap.png")
+
+
 def make_enemy() -> None:
     """동굴 딱정벌레: 밝은 주황 외곽선이라 어두운 바닥에서도 보인다."""
     img = Image.new("RGBA", (13, 10), (0, 0, 0, 0))

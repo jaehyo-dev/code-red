@@ -2,7 +2,7 @@ class_name SlimeMotion
 extends RefCounted
 ## 슬라임 몸의 늘어남·찌그러짐 계산 (화면과 분리). update()가 스프라이트에 곱할 scale을 돌려준다.
 ## 숨쉬기 + 이동 리듬(gait_transform: 앞이 먼저 나가고 뒤가 따라붙는 기어가기) + 가감속 스프링 + 기울기 + 머리 곡선 끌림 + 피격 충격.
-## 공격(덮치기) 모양은 LungePose가 맡는다.
+## 공격(한 입에 삼키기) 모양은 BitePose가 맡는다.
 
 var _time := 0.0
 var _vel := Vector2.ZERO  # 부드럽게 따라가는 이동 입력

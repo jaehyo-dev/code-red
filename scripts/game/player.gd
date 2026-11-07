@@ -1,6 +1,6 @@
 class_name Player
 extends Node2D
-## 보라 슬라임 (1단계). 입력 방향으로 움직이고, 가까운 적이 있으면 몸을 늘여 덮쳐 공격한다.
+## 보라 슬라임 (1단계). 입력 방향으로 움직이고, 가까운 적이 있으면 입을 벌려 한 입에 삼켰다 뱉으며 공격한다.
 ## 총알은 없다: 원거리 공격은 삼킨 아이템에서만 나온다 (v0.3.0).
 
 signal hp_changed(hp: int)
@@ -18,7 +18,12 @@ var _attack := AttackCycle.new()
 var _motion := SlimeMotion.new()
 var _face := SlimeFace.new()
 var _has_target := false
-var _peak := Vector2(1.0, 0.0)  # 이번 덮치기의 최대 (늘어남 배율, 밀림 도트)
+var _prey: Enemy  # 이번에 삼킬 적
+var _reach := 0.0  # 몸 중심에서 적 중심까지 거리 (삼키는 곳까지 몸이 가는 거리)
+var _prey_pos := Vector2.ZERO  # 삼킨 적이 있던 월드 위치 (몸 안에 비춘 그림 위치 계산용)
+var _killed := false  # 이번에 삼킨 적이 죽었는가 (죽으면 뱉지 않고 소화시킴)
+var _fx: SwallowFx  # 삼킨 적을 몸 안에 비추는 연출 부품
+var _time := 0.0  # 꿀럭거림용 시간 (히트스톱 중엔 멈춤)
 var _stop := 0.0  # 히트스톱 남은 시간
 var _eff_move := Vector2.ZERO  # 공격 중 느려진 이동 입력
 # 슬라임은 SubViewport에 도트 크기로 그린 뒤 3배로 키워 보여 준다:
@@ -29,12 +34,19 @@ var _rig: Node2D  # 몸 전체 변형(늘어남·기울기·덮치기)이 걸리
 var _crest: Node2D  # 머리 위 곡선 (밑동을 기준으로 끌림)
 var _face_node: Node2D  # 눈·입 (몸 위에서 쏠림)
 var _eyes: Sprite2D
+var _frame_sprite: Sprite2D  # 입 벌림·감싸기 프레임 (오른쪽을 보는 그림을 돌리거나 뒤집어 씀)
 
 const VIEW_DOTS := 128  # 뷰포트 한 변 (도트). 늘어난 몸이 들어갈 만큼 크게
 const SCALE := 3  # 도트 1칸 = 화면 3픽셀
 const EYES := preload("res://assets/sprites/slime_eyes.png")
 const EYES_SMALL := preload("res://assets/sprites/slime_eyes_small.png")
 const CREST_ROWS := 8  # make_sprites.py의 CREST_ROWS와 같음
+const FRAMES := {
+	BitePose.Frame.OPEN_A: preload("res://assets/sprites/slime_bite_a.png"),
+	BitePose.Frame.OPEN_B: preload("res://assets/sprites/slime_bite_b.png"),
+	BitePose.Frame.WRAP: preload("res://assets/sprites/slime_wrap.png"),
+}
+const CENTER := Vector2(VIEW_DOTS, VIEW_DOTS) / 2.0  # 뷰포트 안 몸 중심 (도트)
 
 
 func _ready() -> void:
@@ -57,6 +69,9 @@ func _ready() -> void:
 	_face_node.add_child(_eyes)
 	_face_node.add_child(_layer("slime_mouth", top_left))
 	_view.add_child(_face_node)  # 몸과 따로 둬서 몸이 늘어나도 얼굴은 안 찌그러지고 몸 중간에 보인다
+	_frame_sprite = Sprite2D.new()
+	_frame_sprite.visible = false
+	_view.add_child(_frame_sprite)
 	_image = Sprite2D.new()
 	_image.texture = _view.get_texture()
 	_image.scale = Vector2(SCALE, SCALE)
@@ -78,9 +93,10 @@ func _layer(sprite_name: String, pos: Vector2) -> Sprite2D:
 func _process(delta: float) -> void:
 	if dead:
 		return
-	if _stop > 0.0:  # 히트스톱: 타격 순간 잠깐 멈춤
+	if _stop > 0.0:  # 히트스톱: 피해 순간 잠깐 멈춤
 		_stop -= delta
 		return
+	_time += delta
 	_invuln = maxf(0.0, _invuln - delta)
 	_flash = maxf(0.0, _flash - delta)
 	# 피격: 번쩍임, 이후 무적 시간 동안 반투명 깜빡임
@@ -101,27 +117,80 @@ func _center() -> Vector2:
 
 
 func _update_attack(delta: float) -> void:
-	var points: Array = get_tree().get_nodes_in_group("enemies").map(func(e: Node2D): return e.position)
-	var target: Variant = Targeting.nearest(_center(), points, Balance.MELEE_RANGE)
-	_has_target = target != null
-	# 준비 중에는 가장 가까운 적을 따라 조준하고, 타격이 시작되면 방향을 고정한다
-	if target != null and _attack.phase in [AttackCycle.Phase.IDLE, AttackCycle.Phase.WINDUP]:
-		_aim = (target - _center()).angle()
-		_peak = LungePose.peak_for(Vector2.from_angle(_aim))
-	if _attack.update(delta, target != null):
-		_strike()
+	var ph := _attack.phase
+	# 준비 중에는 가장 가까운 적을 따라 조준하고, 입이 벌어지는 동안은 그 적을 계속 따라간다
+	if ph == AttackCycle.Phase.IDLE or ph == AttackCycle.Phase.WINDUP:
+		var enemies: Array = get_tree().get_nodes_in_group("enemies").filter(func(e: Enemy): return not e.swallowed)
+		var target: Variant = Targeting.nearest(_center(), enemies.map(func(e: Enemy): return e.position), Balance.MELEE_RANGE)
+		_has_target = target != null
+		if target != null:
+			_prey = enemies[enemies.map(func(e: Enemy): return e.position).find(target)]
+			_track()
+	elif ph == AttackCycle.Phase.OPEN and is_instance_valid(_prey):
+		_track()
+	var landed := _attack.update(delta, _has_target)
+	match _attack.entered:
+		AttackCycle.Phase.ENGULF: _grab()
+		AttackCycle.Phase.RECOVER: _spit()
+	if landed:
+		_bite()
+	_update_swallow()
 
 
-## 타격 순간: 덮치는 방향 부채꼴 안의 모든 적에게 피해
-func _strike() -> void:
-	var dir := Vector2.from_angle(_aim)
-	for e: Enemy in get_tree().get_nodes_in_group("enemies"):
-		if Targeting.in_cone(_center(), dir, e.position, Balance.MELEE_REACH + Balance.ENEMY_RADIUS, deg_to_rad(Balance.MELEE_HALF_ARC_DEG)):
-			e.take_damage(Balance.MELEE_DAMAGE, dir)
-			_stop = Balance.HITSTOP
+## 노린 적 쪽으로 조준하고 거리를 잰다
+func _track() -> void:
+	var to := _prey.position - _center()
+	_aim = to.angle()
+	_reach = minf(to.length(), Balance.MELEE_RANGE + Balance.ENEMY_RADIUS)
 
 
-## 몸 모양: 이동 늘어남·기울기 → 이동 리듬 → 덮치기(늘어남+밀림) 순으로 겹쳐 적용하고, 얼굴·머리 곡선을 옮긴다
+## 감싸기 시작: 적이 닿는 거리 안이면 삼키고(적은 숨고 몸 안에 비춰짐), 아니면 헛물만 켠다
+func _grab() -> void:
+	if not is_instance_valid(_prey) or _prey.swallowed or _center().distance_to(_prey.position) > Balance.MELEE_RANGE + Balance.ENEMY_RADIUS + 1.0:
+		_prey = null
+		return
+	_prey_pos = _prey.position
+	_prey.swallow()
+	_killed = false
+	_fx = SwallowFx.new()
+	_fx.setup(_prey.texture(), 1.0 / SCALE)
+	_view.add_child(_fx)
+
+
+## 몸 안에서 피해 (번쩍임·히트스톱)
+func _bite() -> void:
+	if _fx == null:
+		return
+	_killed = _prey.bite(Balance.MELEE_DAMAGE)
+	_fx.flash()
+	_stop = Balance.HITSTOP
+
+
+## 복귀 시작: 살아 있으면 뱉어 내고, 연출 부품을 치운다
+func _spit() -> void:
+	if _fx == null:
+		return
+	if not _killed:
+		_prey.release(Vector2.from_angle(_aim))
+	_fx.queue_free()
+	_fx = null
+	_prey = null
+
+
+## 몸 안에 비친 적: 위치(몸이 다가가는 만큼 안쪽으로), 들어간 정도, 소화 정도를 갱신
+func _update_swallow() -> void:
+	if _fx == null:
+		return
+	var p := _attack.progress()
+	var body := _center() + Vector2.from_angle(_aim) * BitePose.travel(_attack.phase, p, _reach)
+	_fx.position = CENTER + (_prey_pos - body) / SCALE
+	_fx.inside = clampf(p / 0.3, 0.0, 1.0)
+	if _killed:
+		_fx.digest = clampf((p - Balance.ENGULF_HIT_AT) / (1.0 - Balance.ENGULF_HIT_AT), 0.0, 1.0)
+	_fx.tick(get_process_delta_time())
+
+
+## 몸 모양: 평소(이동 늘어남·기울기·기어가기)에 공격의 웅크림·솟음을 겹치고, 입 프레임이면 프레임으로 바꾼다
 func _pose_body(delta: float) -> void:
 	var sc := _motion.update(delta, _eff_move)
 	var feet := Vector2(0, Balance.SLIME_HALF.y - 1.0)  # 발 기준으로 늘어나고 줄어든다
@@ -130,20 +199,33 @@ func _pose_body(delta: float) -> void:
 	var t := Transform2D(Vector2(sc.x, 0), Vector2(-(_motion.lean() + look.x * Balance.TWIST_SHEAR) * sc.y, sc.y * (1.0 - look.y * Balance.TWIST_VERT)), Vector2.ZERO)
 	t.origin = feet - t.basis_xform(feet) + Vector2(look.x * Balance.TWIST_SHIFT, 0)
 	var body := _motion.gait_transform() * t
-	if _attack.phase != AttackCycle.Phase.IDLE:
-		var p := LungePose.pose(_attack.phase, _attack.progress(), _peak)
-		body = LungePose.transform(Vector2.from_angle(_aim), p.x, p.y) * body
-	var center := Transform2D(0.0, Vector2(VIEW_DOTS, VIEW_DOTS) / 2.0)
+	var dir := Vector2.from_angle(_aim)
+	var frame := BitePose.frame(_attack.phase, _attack.progress())
+	var sq := BitePose.squash(_attack.phase, _attack.progress(), _time)
+	# 웅크림·솟음·꿀럭임은 발 기준 배율. 몸이 적 쪽으로 가는 건 화면 이동(3픽셀 단위)으로 한다
+	var squash := Transform2D(Vector2(sq.x, 0), Vector2(0, sq.y), feet - Vector2(sq.x * feet.x, sq.y * feet.y))
+	var travel := dir * BitePose.travel(_attack.phase, _attack.progress(), _reach) if _attack.phase != AttackCycle.Phase.IDLE else Vector2.ZERO
+	_image.position = Vector2(0, -SCALE * 17) + travel.snappedf(SCALE)
+	# 입이 열릴 땐 눈·입 레이어를 숨기고 프레임(눈·이빨 포함)을 쓴다. 프레임은 방향대로 뒤집기·돌리기
+	_rig.visible = frame == BitePose.Frame.BODY
+	_face_node.visible = _rig.visible
+	_frame_sprite.visible = not _rig.visible
+	if _frame_sprite.visible:
+		_frame_sprite.texture = FRAMES[frame]
+		var rot := Transform2D.IDENTITY if frame == BitePose.Frame.WRAP else BitePose.direction(dir)
+		_frame_sprite.transform = (Transform2D(0.0, CENTER) * squash * rot).scaled_local(Vector2.ONE / SCALE)
+	var center := Transform2D(0.0, CENTER)
+	body = squash * body
 	_rig.transform = center * body
 	_crest.transform = Transform2D(Vector2.RIGHT, Vector2(-_motion.crest_shear(), 1.0), _crest.position)
-	# 얼굴: 공격 중이면 대상 쪽, 아니면 이동 방향을 본다 (공격은 얼굴이 먼저 돌아간 뒤 덮친다)
+	# 얼굴: 공격 중이면 대상 쪽, 아니면 이동 방향을 본다 (공격은 얼굴이 먼저 돌아간 뒤 벌린다)
 	var target_look := Vector2.ZERO
 	if _attack.phase != AttackCycle.Phase.IDLE or _has_target:
-		target_look = Vector2.from_angle(_aim)
+		target_look = dir
 	elif move_input.length() > 0.15:
 		target_look = move_input.normalized()
 	_face.update(delta, target_look)
-	# 얼굴은 늘어난 몸의 중간으로 옮기되 모양은 이동 모션만 받는다 (도트 격자에 맞춰 반올림)
+	# 얼굴은 몸 중간에 놓되 모양은 이동 모션만 받는다 (도트 격자에 맞춰 반올림)
 	var mid := (body * Vector2.ZERO).round()
 	_face_node.transform = center * Transform2D(t.x, t.y, mid + Vector2(_face.offset()))
 	_eyes.texture = EYES_SMALL if _face.small_eyes() else EYES
@@ -160,5 +242,7 @@ func hit(amount: int) -> void:
 	hp_changed.emit(hp)
 	if hp == 0:
 		dead = true
+		if _fx != null:
+			_spit()  # 쓰러지면 삼킨 적을 놓아준다
 		_image.modulate = Color(1, 1, 1, 0.4)
 		died.emit()

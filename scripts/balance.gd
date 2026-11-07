@@ -26,50 +26,48 @@ const ENEMY_SPAWN_INTERVAL := 1.5
 ## 슬라임에게서 이 거리 이상 떨어진 곳에서 나타남
 const ENEMY_SPAWN_MIN_DIST := 520.0
 
-# --- 몸 공격 (덮치기): 준비(웅크림) → 타격(몸이 늘어나며 튀어나감) → 복귀(눌렸다 튕김) → 쿨다운 ---
-## 가장 가까운 적이 이 거리(슬라임 몸 중심 기준) 안에 들어오면 공격을 시작한다
+# --- 몸 공격 (한 입에 삼키기): 웅크림 → 입 벌림(솟으며 다가감) → 감쌈(피해) → 뱉으며 복귀 → 쿨다운 ---
+## 가장 가까운 적이 이 거리(슬라임 몸 중심 기준) 안에 들어오면 공격을 시작한다. 입 벌림이 끝날 때 이 거리 + 적 반지름 안에 있어야 삼킨다
 const MELEE_RANGE := 190.0
-## 몸이 닿는 거리. 적의 반지름만큼 더해서 판정한다
-const MELEE_REACH := 190.0
-## 타격 부채꼴 절반 각도(도). 덮치는 방향 앞쪽만 맞는다
-const MELEE_HALF_ARC_DEG := 30.0
 const MELEE_DAMAGE := 2
-## 맞은 적이 밀려나는 거리
-const MELEE_KNOCKBACK := 24.0
-const ATTACK_WINDUP := 0.28
-const ATTACK_STRIKE := 0.12
-const ATTACK_RECOVER := 0.30
-const ATTACK_COOLDOWN := 0.25
-## 타격 단계가 이만큼(0~1) 진행했을 때 적에게 닿는다 (몸이 거의 다 늘어난 순간)
-const ATTACK_HIT_AT := 0.8
+## 삼켰다 뱉을 때 적이 날아가는 거리
+const MELEE_KNOCKBACK := 60.0
+const ATTACK_WINDUP := 0.22
+const ATTACK_OPEN := 0.20
+const ATTACK_ENGULF := 0.40
+const ATTACK_RECOVER := 0.28
+const ATTACK_COOLDOWN := 0.20
+## 감싸는 단계가 이만큼(0~1) 진행했을 때 피해를 준다 (몸이 적을 덮친 직후)
+const ENGULF_HIT_AT := 0.35
 ## 맞은 적이 하얗게 번쩍이는 시간
 const HIT_FLASH := 0.1
-## 타격 순간 슬라임과 맞은 적이 멈추는 시간 (히트스톱)
-const HITSTOP := 0.05
+## 피해 순간 슬라임이 멈추는 시간 (히트스톱)
+const HITSTOP := 0.07
 ## 공격 중(준비~복귀) 이동 속도 배율. 0이면 멈춤. 느려지게 둬서 덮칠 방향은 지키되 조작이 끊기지 않게 한다
 const ATTACK_MOVE_MULT := 0.35
+## 웅크릴 때 몸이 뒤로 물러나는 거리 (픽셀)
+const BITE_PULLBACK := 12.0
+## 입 벌림이 끝났을 때 적까지 거리의 이만큼(0~1)을 이미 다가가 있다 (나머지는 감싸며 덮침)
+const BITE_OPEN_REACH := 0.6
+## 웅크림 때 몸이 퍼지고 낮아지는 정도 / 입 벌림 끝에 솟아 길어지는 정도 (가로, 세로 배율)
+const BITE_CROUCH := Vector2(1.15, 0.8)
+const BITE_RISE := Vector2(0.92, 1.1)
 
-# --- 덮치기 모양 (도트 단위: 슬라임 스프라이트는 26x35도트) ---
-## 덮치기 모양 안: 0 = 안 A(늘어남 위주), 1 = 안 B(짧은 돌진). 이 값 하나로 바꾼다
-const STYLE_STRETCH := 0
-const STYLE_HOP := 1
-const ATTACK_STYLE := STYLE_HOP
+# --- 삼키는 연출 (몸 안에 비친 대상): 아이템·생명체 삼키기에서도 재사용 ---
+## 몸 안에서 대상이 줄어드는 크기 배율 / 비치는 투명도 / 비치는 색 / 꿀럭거림 속도·크기
+const SWALLOW_INNER_SCALE := 0.6
+const SWALLOW_ALPHA := 0.65
+const SWALLOW_TINT := Color(1.0, 0.7, 1.0)
+const SWALLOW_WOBBLE_SPEED := 22.0
+const SWALLOW_WOBBLE := 0.07
+## 대상을 뱉은 뒤 별이 반짝이는 시간
+const SPARKLE_TIME := 0.6
+
+# --- 몸 크기 (도트 단위: 슬라임 스프라이트는 26x35도트) ---
 ## 슬라임 몸의 반 크기 (도트, 몸 중심은 위에서 18번째 줄)
 const SLIME_HALF := Vector2(13.0, 18.0)
 ## 슬라임 발(노드 위치)에서 몸 중심까지의 높이 (픽셀). 사거리·조준은 몸 중심 기준이다
 const BODY_CENTER_Y := 51.0
-## 덮칠 때 몸의 앞쪽 끝이 닿는 거리 (몸 중심에서, 도트): 사거리 끝의 적 가장자리에 살짝 겹침
-const LUNGE_TIP_DOTS := (MELEE_RANGE - ENEMY_RADIUS) / 3.0 + 1.0
-## 늘어난 만큼 옆이 가늘어지는 정도 (1 = 넓이 보존, 0 = 안 가늘어짐)
-const LUNGE_VOLUME := 0.7
-## 안 A: 최대 늘어남 배율 / 웅크릴 때 길이 / 웅크릴 때 뒤로 물러나는 도트. 모자란 거리는 몸이 앞으로 밀려 채움
-const A_MAX_STRETCH := 1.9
-const A_CROUCH := 0.78
-const A_PULLBACK := 6.0
-## 안 B: 앞으로 튀어나가는 도트(23도트 = 약 70픽셀) / 웅크릴 때 길이 / 뒤로 물러나는 도트. 늘어남은 남는 거리만큼만
-const B_HOP_DOTS := 23.0
-const B_CROUCH := 0.88
-const B_PULLBACK := 2.0
 
 # --- 슬라임 모션 (늘어남·찌그러짐 비율. 0.2 = 20%) ---
 const BREATH_SPEED := 2.6

@@ -40,3 +40,5 @@
 | `assets/sprites/*.png`, `assets/tiles/tiles.png` (적, 수정, 버섯, 돌더미, 뼈, 항아리, 모닥불, 타일) | 이 프로젝트에서 `tools/make_sprites.py`로 직접 그림 (CC0 수준으로 자유 사용, 외부 에셋 없음) | 동굴 방 | 없음 |
 | `assets/sprites/slime_body.png`, `slime_crest.png`, `slime_eyes.png`, `slime_eyes_small.png`, `slime_mouth.png` | AI 도안 `assets/concept/evolution_v2.png`(위 표)의 1단계를 `tools/make_sprites.py`로 잘라 26도트 폭 격자로 줄이고 팔레트에 맞춤 → 몸통·머리 곡선·눈·입 레이어로 분리 (작은 눈은 직접 그림) | 주인공 슬라임 | 축소·색 정리·레이어 분리 |
 | 스테이지 콘셉트 `assets/concept/stage_stone_a~c.png`, 비교 `stage_stone_compare.png` | Codex 내장 이미지 생성 (gpt-image-2), 요청문은 [ASSET_PROMPTS.md](ASSET_PROMPTS.md) | C(발광 이끼 동굴) 확정, A·B는 다른 시대용 보관. 참고용이며 게임에는 포함하지 않음 | 없음 (비교는 라벨 추가) |
+| `assets/sprites/slime_bite_a.png`, `slime_bite_b.png`, `slime_wrap.png` (입 벌림 2장, 감싸기 1장) | 이 프로젝트에서 `tools/make_sprites.py`의 `make_bite_frames()`로 직접 그림 (슬라임 팔레트, 외부 에셋 없음) | 슬라임 "한 입에 삼키기" 공격 | 없음 |
+| 공격 콘셉트 `assets/concept/attack_compare.png` | Codex 내장 이미지 생성 (gpt-image-2), 요청문은 [ASSET_PROMPTS.md](ASSET_PROMPTS.md) | 안 A "한 입에 삼키기" 확정(v0.1.5에서 구현), 안 B "점프 내려찍기"는 폼·무기 변신 연출용 보관, 안 C 폐기. 참고용이며 게임에는 포함하지 않음 | 없음 |

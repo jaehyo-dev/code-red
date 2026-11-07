@@ -9,7 +9,8 @@ var target: Player
 var hp := Balance.ENEMY_HP
 var _sprite: Sprite2D
 var _flash := 0.0
-var _stop := 0.0  # 히트스톱 남은 시간
+## 삼켜져서 몸 안에 있는 동안 true: 움직이지도 공격하지도 않고 보이지도 않는다 (몸 안의 모습은 SwallowFx가 그린다)
+var swallowed := false
 
 
 func _ready() -> void:
@@ -21,8 +22,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if _stop > 0.0:  # 맞은 순간 잠깐 멈춤 (번쩍임도 같이 멈춰 보임)
-		_stop -= delta
+	if swallowed:
 		return
 	_flash = maxf(0.0, _flash - delta)
 	_sprite.modulate = Color(2.5, 2.5, 2.5) if _flash > 0.0 else Color.WHITE
@@ -34,12 +34,32 @@ func _process(delta: float) -> void:
 		target.hit(Balance.ENEMY_DAMAGE)
 
 
-## 피해를 받는다. from_dir 방향으로 조금 밀려나고 하얗게 번쩍인다.
-func take_damage(amount: int, from_dir := Vector2.ZERO) -> void:
+## 삼킨 몸 안에 비출 그림
+func texture() -> Texture2D:
+	return _sprite.texture
+
+
+## 삼켜진다: 멈추고 숨는다
+func swallow() -> void:
+	swallowed = true
+	visible = false
+
+
+## 피해를 입히고 죽었는지 돌려준다. 죽으면 바로 사라진다 (삼킨 쪽 SwallowFx가 소화 연출을 그린다)
+func bite(amount: int) -> bool:
 	hp -= amount
-	_flash = Balance.HIT_FLASH
-	_stop = Balance.HITSTOP
+	if hp > 0:
+		return false
+	remove_from_group("enemies")  # 소화되는 동안 다시 노려지지 않게
+	died.emit()
+	queue_free()
+	return true
+
+
+## 살아서 뱉어진다: from_dir 방향으로 날아가며 별이 반짝인다
+func release(from_dir: Vector2) -> void:
+	swallowed = false
+	visible = true
 	position += from_dir * Balance.MELEE_KNOCKBACK
-	if hp <= 0:
-		died.emit()
-		queue_free()
+	_flash = Balance.HIT_FLASH
+	add_child(Sparkle.new())
