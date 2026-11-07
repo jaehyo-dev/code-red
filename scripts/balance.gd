@@ -96,6 +96,12 @@ const SPRING_DAMPING := 22.0
 const HIT_KICK := Vector2(11.0, -11.0)
 const PLAYER_FLASH := 0.12
 
+# --- 몸통 비틀기 (정지해도 바라보는 방향이 몸에서 보이게) ---
+## 바라보는 쪽으로 몸 위쪽이 기우는 비율 / 몸이 쏠리는 도트 / 위를 볼 때 길어지고 아래를 볼 때 낮아지는 비율
+const TWIST_SHEAR := 0.08
+const TWIST_SHIFT := 1.0
+const TWIST_VERT := 0.05
+
 # --- 얼굴 (눈·입 레이어가 바라보는 쪽으로 쏠림) ---
 const FACE_FOLLOW := 14.0
 ## 옆/아래로 쏠리는 최대 도트, 위로 올라가는 최대 도트

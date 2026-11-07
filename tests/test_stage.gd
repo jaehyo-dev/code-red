@@ -74,6 +74,20 @@ func test_덮칠_때_몸이_적_방향으로_늘어나고_얼굴이_그쪽을_�
 	stage.queue_free()
 
 
+func test_가만히_서_있어도_바라보는_쪽으로_몸통이_기움() -> void:
+	var stage := _make_stage()
+	await wait_frames()
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.queue_free()
+	stage.player._face.look = Vector2.RIGHT
+	await wait_frames(2)
+	assert_true(stage.player._rig.transform.y.x < -0.04, "오른쪽을 보면 위쪽이 오른쪽으로 기움 %f" % stage.player._rig.transform.y.x)
+	stage.player._face.look = Vector2.LEFT
+	await wait_frames(2)
+	assert_true(stage.player._rig.transform.y.x > 0.04, "왼쪽을 보면 반대 %f" % stage.player._rig.transform.y.x)
+	stage.queue_free()
+
+
 func test_멀리_있는_적에게는_공격하지_않음() -> void:
 	var stage := _make_stage()
 	await wait_frames()

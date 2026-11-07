@@ -125,8 +125,10 @@ func _strike() -> void:
 func _pose_body(delta: float) -> void:
 	var sc := _motion.update(delta, _eff_move)
 	var feet := Vector2(0, Balance.SLIME_HALF.y - 1.0)  # 발 기준으로 늘어나고 줄어든다
-	var t := Transform2D(Vector2(sc.x, 0), Vector2(-_motion.lean() * sc.y, sc.y), Vector2.ZERO)
-	t.origin = feet - t.basis_xform(feet)
+	# 몸통 비틀기: 바라보는 쪽으로 위쪽이 기울고 몸이 살짝 쏠려서 정지해도 방향이 보인다
+	var look := _face.look
+	var t := Transform2D(Vector2(sc.x, 0), Vector2(-(_motion.lean() + look.x * Balance.TWIST_SHEAR) * sc.y, sc.y * (1.0 - look.y * Balance.TWIST_VERT)), Vector2.ZERO)
+	t.origin = feet - t.basis_xform(feet) + Vector2(look.x * Balance.TWIST_SHIFT, 0)
 	var body := _motion.gait_transform() * t
 	if _attack.phase != AttackCycle.Phase.IDLE:
 		var p := LungePose.pose(_attack.phase, _attack.progress(), _peak)
@@ -135,12 +137,12 @@ func _pose_body(delta: float) -> void:
 	_rig.transform = center * body
 	_crest.transform = Transform2D(Vector2.RIGHT, Vector2(-_motion.crest_shear(), 1.0), _crest.position)
 	# 얼굴: 공격 중이면 대상 쪽, 아니면 이동 방향을 본다 (공격은 얼굴이 먼저 돌아간 뒤 덮친다)
-	var look := Vector2.ZERO
+	var target_look := Vector2.ZERO
 	if _attack.phase != AttackCycle.Phase.IDLE or _has_target:
-		look = Vector2.from_angle(_aim)
+		target_look = Vector2.from_angle(_aim)
 	elif move_input.length() > 0.15:
-		look = move_input.normalized()
-	_face.update(delta, look)
+		target_look = move_input.normalized()
+	_face.update(delta, target_look)
 	# 얼굴은 늘어난 몸의 중간으로 옮기되 모양은 이동 모션만 받는다 (도트 격자에 맞춰 반올림)
 	var mid := (body * Vector2.ZERO).round()
 	_face_node.transform = center * Transform2D(t.x, t.y, mid + Vector2(_face.offset()))
