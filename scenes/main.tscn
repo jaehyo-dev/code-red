@@ -1,6 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/game/stage.gd" id="2_stage"]
+[ext_resource type="Script" path="res://scripts/game/joystick.gd" id="3_joy"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -9,43 +11,66 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 script = ExtResource("1_main")
 
-[node name="Title" type="Label" parent="."]
-layout_mode = 1
+[node name="Stage" type="Node2D" parent="."]
+unique_name_in_owner = true
+script = ExtResource("2_stage")
+
+[node name="Hud" type="CanvasLayer" parent="."]
+
+[node name="Joystick" type="Control" parent="Hud"]
+unique_name_in_owner = true
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_joy")
+
+[node name="HpLabel" type="Label" parent="Hud"]
+unique_name_in_owner = true
+offset_left = 24.0
+offset_top = 20.0
+offset_right = 300.0
+offset_bottom = 70.0
+theme_override_colors/font_color = Color(0.9, 0.6, 1, 1)
+theme_override_font_sizes/font_size = 32
+text = "HP"
+
+[node name="VersionLabel" type="Label" parent="Hud"]
+unique_name_in_owner = true
+offset_left = 520.0
+offset_top = 24.0
+offset_right = 696.0
+offset_bottom = 60.0
+theme_override_colors/font_color = Color(0.6, 0.5, 0.75, 1)
+theme_override_font_sizes/font_size = 22
+text = "v0.0.0"
+horizontal_alignment = 2
+
+[node name="GameOverLabel" type="Label" parent="Hud"]
+unique_name_in_owner = true
+visible = false
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -300.0
-offset_top = -40.0
+offset_top = -80.0
 offset_right = 300.0
-offset_bottom = 40.0
+offset_bottom = 80.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_colors/font_color = Color(0.71, 0.33, 1, 1)
-theme_override_font_sizes/font_size = 48
-text = "코드:레드"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="VersionLabel" type="Label" parent="."]
-unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 7
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -200.0
-offset_top = -60.0
-offset_right = 200.0
-offset_bottom = -20.0
-grow_horizontal = 2
-grow_vertical = 0
-theme_override_colors/font_color = Color(0.6, 0.5, 0.75, 1)
-theme_override_font_sizes/font_size = 24
-text = "v0.0.0"
+theme_override_colors/font_color = Color(1, 0.85, 1, 1)
+theme_override_colors/font_outline_color = Color(0.18, 0.03, 0.26, 1)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 36
+text = "슬라임이 쓰러졌어요
+화면을 누르면 다시 시작"
 horizontal_alignment = 1
 vertical_alignment = 1
