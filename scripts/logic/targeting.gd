@@ -13,3 +13,11 @@ static func nearest(origin: Vector2, points: Array, range_max: float) -> Variant
 			best_d = d
 			best = p
 	return best
+
+
+## point가 origin에서 dir 방향 부채꼴(반각 half_arc 라디안, 거리 reach 이하) 안에 있는가
+static func in_cone(origin: Vector2, dir: Vector2, point: Vector2, reach: float, half_arc: float) -> bool:
+	var to := point - origin
+	if to.length() > reach:
+		return false
+	return to.length() < 0.001 or absf(dir.angle_to(to)) <= half_arc

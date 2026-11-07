@@ -42,22 +42,33 @@ func test_카메라_한계가_맵_전체_크기() -> void:
 	stage.queue_free()
 
 
-func test_적이_생기고_자동_공격이_맞혀_쓰러뜨림() -> void:
+func test_적이_생기고_몸_공격이_맞혀_쓰러뜨림() -> void:
 	var stage := _make_stage()
 	await wait_frames()
 	# 시작하자마자 적이 하나 생긴다 (생성 타이머가 0에서 시작)
 	var enemies := get_tree().get_nodes_in_group("enemies")
 	assert_eq(enemies.size(), 1)
 	var e: Enemy = enemies[0]
-	e.position = stage.player.position + Vector2(200, 0)  # 사거리 안
-	stage.player._fire()
-	assert_eq(stage._world.get_children().filter(func(n): return n is Glob).size(), 1, "점액탄 발사")
-	for i in 240:  # 시간을 흘려 점액탄을 맞힘 (적 hp 3 → 3발)
+	e.target = null  # 적이 움직이지 않게 고정
+	e.position = stage.player.position + Vector2(100, 0)  # 근접 사거리 안
+	for i in 240:  # 시간을 흘려 촉수를 맞힘 (적 hp 3, 피해 2 → 2번)
 		await wait_frames()
 		if not is_instance_valid(e) or e.is_queued_for_deletion():
 			break
-		stage.player._attack_cd = 0.0
-	assert_true(not is_instance_valid(e) or e.is_queued_for_deletion(), "적이 쓰러짐 (hp 3 → 점액탄 3발)")
+	assert_true(not is_instance_valid(e) or e.is_queued_for_deletion(), "적이 쓰러짐 (hp 3, 촉수 피해 2 → 2번)")
+	stage.queue_free()
+
+
+func test_멀리_있는_적에게는_공격하지_않음() -> void:
+	var stage := _make_stage()
+	await wait_frames()
+	var e: Enemy = get_tree().get_nodes_in_group("enemies")[0]
+	e.target = null
+	e.position = stage.player.position + Vector2(Balance.MELEE_RANGE + 60.0, 0)
+	for i in 60:
+		await wait_frames()
+	assert_eq(stage.player._attack.phase, AttackCycle.Phase.IDLE, "사거리 밖이면 공격 안 함")
+	assert_eq(e.hp, Balance.ENEMY_HP, "체력 그대로")
 	stage.queue_free()
 
 
