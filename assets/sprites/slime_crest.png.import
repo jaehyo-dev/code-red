@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://1tk40fkgk362"
-path="res://.godot/imported/tentacle.png-ac665ba1303d148aeaa5f68ae4d32ed8.ctex"
+uid="uid://5s77faaynteb"
+path="res://.godot/imported/slime_crest.png-64a3791e77c31a2336c7fd2288e86800.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/tentacle.png"
-dest_files=["res://.godot/imported/tentacle.png-ac665ba1303d148aeaa5f68ae4d32ed8.ctex"]
+source_file="res://assets/sprites/slime_crest.png"
+dest_files=["res://.godot/imported/slime_crest.png-64a3791e77c31a2336c7fd2288e86800.ctex"]
 
 [params]
 

@@ -10,7 +10,7 @@ var _cooldown := 0.0
 var _hit_done := false
 
 
-## delta만큼 진행한다. 타격이 맞는 순간(타격 단계의 중간) 한 프레임만 true.
+## delta만큼 진행한다. 타격이 맞는 순간(몸이 거의 다 늘어난 때) 한 프레임만 true.
 func update(delta: float, has_target: bool) -> bool:
 	var landed := false
 	match phase:
@@ -24,7 +24,7 @@ func update(delta: float, has_target: bool) -> bool:
 				_enter(Phase.STRIKE)
 		Phase.STRIKE:
 			_t += delta
-			if not _hit_done and _t >= Balance.ATTACK_STRIKE * 0.5:
+			if not _hit_done and _t >= Balance.ATTACK_STRIKE * Balance.ATTACK_HIT_AT:
 				_hit_done = true
 				landed = true
 			if _t >= Balance.ATTACK_STRIKE:

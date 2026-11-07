@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://3yhmo70evbnv"
-path="res://.godot/imported/slime.png-ef39d3a984e40a937a22dc6f527ce7e0.ctex"
+uid="uid://d3saymp64kngm"
+path="res://.godot/imported/slime_eyes_small.png-41b47fd70b96c8ffe1df6708b26d4cee.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/slime.png"
-dest_files=["res://.godot/imported/slime.png-ef39d3a984e40a937a22dc6f527ce7e0.ctex"]
+source_file="res://assets/sprites/slime_eyes_small.png"
+dest_files=["res://.godot/imported/slime_eyes_small.png-41b47fd70b96c8ffe1df6708b26d4cee.ctex"]
 
 [params]
 

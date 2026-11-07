@@ -51,11 +51,26 @@ func test_적이_생기고_몸_공격이_맞혀_쓰러뜨림() -> void:
 	var e: Enemy = enemies[0]
 	e.target = null  # 적이 움직이지 않게 고정
 	e.position = stage.player.position + Vector2(100, 0)  # 근접 사거리 안
-	for i in 240:  # 시간을 흘려 촉수를 맞힘 (적 hp 3, 피해 2 → 2번)
+	for i in 240:  # 시간을 흘려 몸 공격을 맞힘 (적 hp 3, 피해 2 → 2번)
 		await wait_frames()
 		if not is_instance_valid(e) or e.is_queued_for_deletion():
 			break
-	assert_true(not is_instance_valid(e) or e.is_queued_for_deletion(), "적이 쓰러짐 (hp 3, 촉수 피해 2 → 2번)")
+	assert_true(not is_instance_valid(e) or e.is_queued_for_deletion(), "적이 쓰러짐 (hp 3, 몸 공격 피해 2 → 2번)")
+	stage.queue_free()
+
+
+func test_덮칠_때_몸이_적_방향으로_늘어나고_얼굴이_그쪽을_봄() -> void:
+	var stage := _make_stage()
+	await wait_frames()
+	var e: Enemy = get_tree().get_nodes_in_group("enemies")[0]
+	e.target = null
+	e.position = stage.player.position + Vector2(100, 0)
+	var longest := 0.0
+	for i in 60:
+		await wait_frames()
+		longest = maxf(longest, stage.player._rig.transform.x.length())
+	assert_true(longest > 1.5, "오른쪽 적을 향해 가로로 늘어남 %f" % longest)
+	assert_true(stage.player._face.look.x > 0.9, "얼굴이 적 쪽(오른쪽)을 봄")
 	stage.queue_free()
 
 

@@ -3,7 +3,7 @@
 
 모든 그림은 "도트 1칸 = 화면 3픽셀" 격자로 그린다: 작은 해상도(도트)로 그린 뒤 3배 확대(최근접).
 - 슬라임: 확정 도안 assets/concept/evolution_v2.png 의 1단계를 잘라 도트 격자로 줄이고 팔레트에 맞춤
-- 나머지(적, 수정, 버섯, 돌더미, 뼈, 항아리, 모닥불, 촉수, 타일): 코드로 직접 그림 (시드 고정)
+- 나머지(적, 수정, 버섯, 돌더미, 뼈, 항아리, 모닥불, 타일): 코드로 직접 그림 (시드 고정)
 사용: python3 tools/make_sprites.py   (저장소 루트에서)
 """
 import random
@@ -65,7 +65,36 @@ def make_slime() -> None:
                 continue
             d = ((pal - px[y, x]) ** 2).sum(axis=1)
             out[y, x] = (*pal[d.argmin()], 255)
-    save(Image.fromarray(out), OUT / "slime.png")
+    split_slime(out)
+
+
+# 슬라임 분리 레이어 (도트 좌표). 눈·입은 몸통과 따로 움직이고, 머리 곡선은 관성으로 끌려온다.
+EYES_BOX = (6, 16, 20, 20)    # x0, y0, x1, y1 (끝 제외)
+MOUTH_BOX = (9, 20, 17, 24)
+CREST_ROWS = 8                # 위쪽 8줄이 머리 곡선
+
+
+def split_slime(full: np.ndarray) -> None:
+    """합쳐진 슬라임을 몸통(눈·입·곡선 없음), 머리 곡선, 눈, 작은 눈, 입으로 나눠 저장."""
+    body_col = np.array([*SLIME_PAL["body"], 255], np.uint8)
+    body = full.copy()
+    eyes = np.zeros_like(full)
+    mouth = np.zeros_like(full)
+    for box, layer in ((EYES_BOX, eyes), (MOUTH_BOX, mouth)):
+        x0, y0, x1, y1 = box
+        layer[y0:y1, x0:x1] = full[y0:y1, x0:x1]
+        body[y0:y1, x0:x1] = body_col  # 몸통 색으로 메움 (몸 밖 투명 칸은 눈·입 상자에 없음)
+    crest = np.zeros_like(body)
+    crest[:CREST_ROWS] = body[:CREST_ROWS]
+    body[:CREST_ROWS] = 0
+    crest[CREST_ROWS, 18:] = full[CREST_ROWS, 18:]  # 곡선 끝에 매달린 점도 곡선 쪽으로
+    body[CREST_ROWS, 18:] = 0
+    small = np.zeros_like(full)  # 위를 볼 때: 눈이 작아짐 (눈마다 2x2 흰색)
+    for x in (7, 17):
+        small[17:19, x:x + 2] = (*SLIME_PAL["white"], 255)
+    for name, arr in (("slime_body", body), ("slime_crest", crest), ("slime_eyes", eyes),
+                      ("slime_eyes_small", small), ("slime_mouth", mouth)):
+        save(Image.fromarray(arr), OUT / f"{name}.png")
 
 
 def make_enemy() -> None:
@@ -158,30 +187,6 @@ def make_campfire() -> None:
     save(outline(img, (0x24, 0x18, 0x1C)), OUT / "campfire.png")
 
 
-def make_tentacle() -> None:
-    """몸 공격용 촉수. 왼쪽 끝(몸 쪽)이 굵고 오른쪽 끝으로 갈수록 가늘며 살짝 휜다."""
-    length = 42
-    img = Image.new("RGBA", (length, 13), (0, 0, 0, 0))
-    px = img.load()
-    for x in range(length):
-        t = x / (length - 1)
-        center = 6.5 + 1.5 * np.sin(t * np.pi * 1.5)
-        half = 4.5 - 3.3 * t
-        for y in range(13):
-            d = y - center
-            if abs(d) <= half:
-                color = SLIME_PAL["light"] if d < -half * 0.3 else SLIME_PAL["body"]
-                if d > half * 0.45:
-                    color = SLIME_PAL["dark"]
-                px[x, y] = (*color, 255)
-    for x in range(8, length - 4, 7):  # 빨판 느낌의 밝은 점
-        for y in range(13):
-            if px[x, y][3] and px[x, y][:3] == SLIME_PAL["body"]:
-                px[x, y] = (*SLIME_PAL["high"], 255)
-                break
-    save(outline(img, SLIME_PAL["outline"]), OUT / "tentacle.png")
-
-
 def make_tiles() -> None:
     """tiles.png: 16x16 도트 타일 격자.
     0행: 바닥 4종 / 1행: 벽 3종 / 2행: 바닥과 맞닿은 벽 (위·아래·왼쪽·오른쪽 벽의 안쪽 줄)."""
@@ -235,6 +240,6 @@ def make_tiles() -> None:
 
 if __name__ == "__main__":
     for fn in (make_slime, make_enemy, make_crystal, make_mushroom, make_rubble, make_bones,
-               make_pot, make_campfire, make_tentacle, make_tiles):
+               make_pot, make_campfire, make_tiles):
         fn()
     print("완료:", OUT, TILES)
