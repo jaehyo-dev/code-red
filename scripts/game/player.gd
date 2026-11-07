@@ -18,7 +18,9 @@ var _attack := AttackCycle.new()
 var _motion := SlimeMotion.new()
 var _face := SlimeFace.new()
 var _has_target := false
-var _peak := 1.0  # 이번 덮치기의 최대 늘어남 배율
+var _peak := Vector2(1.0, 0.0)  # 이번 덮치기의 최대 (늘어남 배율, 밀림 도트)
+var _stop := 0.0  # 히트스톱 남은 시간
+var _eff_move := Vector2.ZERO  # 공격 중 느려진 이동 입력
 # 슬라임은 SubViewport에 도트 크기로 그린 뒤 3배로 키워 보여 준다:
 # 늘이고 기울여도 도트가 항상 3x3 픽셀 격자로 보이게 하기 위해서다.
 var _view: SubViewport
@@ -54,7 +56,7 @@ func _ready() -> void:
 	_eyes = _layer("slime_eyes", top_left)
 	_face_node.add_child(_eyes)
 	_face_node.add_child(_layer("slime_mouth", top_left))
-	_rig.add_child(_face_node)
+	_view.add_child(_face_node)  # 몸과 따로 둬서 몸이 늘어나도 얼굴은 안 찌그러지고 몸 중간에 보인다
 	_image = Sprite2D.new()
 	_image.texture = _view.get_texture()
 	_image.scale = Vector2(SCALE, SCALE)
@@ -76,6 +78,9 @@ func _layer(sprite_name: String, pos: Vector2) -> Sprite2D:
 func _process(delta: float) -> void:
 	if dead:
 		return
+	if _stop > 0.0:  # 히트스톱: 타격 순간 잠깐 멈춤
+		_stop -= delta
+		return
 	_invuln = maxf(0.0, _invuln - delta)
 	_flash = maxf(0.0, _flash - delta)
 	# 피격: 번쩍임, 이후 무적 시간 동안 반투명 깜빡임
@@ -83,18 +88,25 @@ func _process(delta: float) -> void:
 		_image.modulate = Color(2.5, 2.5, 2.5)
 	else:
 		_image.modulate = Color(1, 1, 1, 0.5 if _invuln > 0.0 and int(_invuln * 14.0) % 2 == 1 else 1.0)
-	position = arena.clamp_inside(position + move_input * Balance.PLAYER_SPEED * delta, Balance.PLAYER_RADIUS)
+	# 공격 중에는 느리게 움직여서 덮칠 방향이 흐트러지지 않게 한다
+	_eff_move = move_input * (1.0 if _attack.phase == AttackCycle.Phase.IDLE else Balance.ATTACK_MOVE_MULT)
+	position = arena.clamp_inside(position + _eff_move * Balance.PLAYER_SPEED * delta, Balance.PLAYER_RADIUS)
 	_update_attack(delta)
 	_pose_body(delta)
 
 
+## 몸 중심 (사거리·조준·타격 기준)
+func _center() -> Vector2:
+	return position + Vector2(0, -Balance.BODY_CENTER_Y)
+
+
 func _update_attack(delta: float) -> void:
 	var points: Array = get_tree().get_nodes_in_group("enemies").map(func(e: Node2D): return e.position)
-	var target: Variant = Targeting.nearest(position, points, Balance.MELEE_RANGE)
+	var target: Variant = Targeting.nearest(_center(), points, Balance.MELEE_RANGE)
 	_has_target = target != null
 	# 준비 중에는 가장 가까운 적을 따라 조준하고, 타격이 시작되면 방향을 고정한다
 	if target != null and _attack.phase in [AttackCycle.Phase.IDLE, AttackCycle.Phase.WINDUP]:
-		_aim = (target - position).angle()
+		_aim = (target - _center()).angle()
 		_peak = LungePose.peak_for(Vector2.from_angle(_aim))
 	if _attack.update(delta, target != null):
 		_strike()
@@ -104,20 +116,23 @@ func _update_attack(delta: float) -> void:
 func _strike() -> void:
 	var dir := Vector2.from_angle(_aim)
 	for e: Enemy in get_tree().get_nodes_in_group("enemies"):
-		if Targeting.in_cone(position, dir, e.position, Balance.MELEE_REACH + Balance.ENEMY_RADIUS, deg_to_rad(Balance.MELEE_HALF_ARC_DEG)):
+		if Targeting.in_cone(_center(), dir, e.position, Balance.MELEE_REACH + Balance.ENEMY_RADIUS, deg_to_rad(Balance.MELEE_HALF_ARC_DEG)):
 			e.take_damage(Balance.MELEE_DAMAGE, dir)
+			_stop = Balance.HITSTOP
 
 
-## 몸 모양: 이동 늘어남·기울기 → 덮치기 늘어남(방향) 순으로 겹쳐 적용하고, 얼굴·머리 곡선을 옮긴다
+## 몸 모양: 이동 늘어남·기울기 → 이동 리듬 → 덮치기(늘어남+밀림) 순으로 겹쳐 적용하고, 얼굴·머리 곡선을 옮긴다
 func _pose_body(delta: float) -> void:
-	var sc := _motion.update(delta, move_input)
+	var sc := _motion.update(delta, _eff_move)
 	var feet := Vector2(0, Balance.SLIME_HALF.y - 1.0)  # 발 기준으로 늘어나고 줄어든다
 	var t := Transform2D(Vector2(sc.x, 0), Vector2(-_motion.lean() * sc.y, sc.y), Vector2.ZERO)
 	t.origin = feet - t.basis_xform(feet)
+	var body := _motion.gait_transform() * t
 	if _attack.phase != AttackCycle.Phase.IDLE:
-		var k := LungePose.length(_attack.phase, _attack.progress(), _peak)
-		t = LungePose.transform(Vector2.from_angle(_aim), k) * t
-	_rig.transform = Transform2D(0.0, Vector2(VIEW_DOTS, VIEW_DOTS) / 2.0) * t
+		var p := LungePose.pose(_attack.phase, _attack.progress(), _peak)
+		body = LungePose.transform(Vector2.from_angle(_aim), p.x, p.y) * body
+	var center := Transform2D(0.0, Vector2(VIEW_DOTS, VIEW_DOTS) / 2.0)
+	_rig.transform = center * body
 	_crest.transform = Transform2D(Vector2.RIGHT, Vector2(-_motion.crest_shear(), 1.0), _crest.position)
 	# 얼굴: 공격 중이면 대상 쪽, 아니면 이동 방향을 본다 (공격은 얼굴이 먼저 돌아간 뒤 덮친다)
 	var look := Vector2.ZERO
@@ -126,7 +141,9 @@ func _pose_body(delta: float) -> void:
 	elif move_input.length() > 0.15:
 		look = move_input.normalized()
 	_face.update(delta, look)
-	_face_node.position = Vector2(_face.offset())
+	# 얼굴은 늘어난 몸의 중간으로 옮기되 모양은 이동 모션만 받는다 (도트 격자에 맞춰 반올림)
+	var mid := (body * Vector2.ZERO).round()
+	_face_node.transform = center * Transform2D(t.x, t.y, mid + Vector2(_face.offset()))
 	_eyes.texture = EYES_SMALL if _face.small_eyes() else EYES
 
 

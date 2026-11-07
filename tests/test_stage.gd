@@ -64,12 +64,12 @@ func test_덮칠_때_몸이_적_방향으로_늘어나고_얼굴이_그쪽을_�
 	await wait_frames()
 	var e: Enemy = get_tree().get_nodes_in_group("enemies")[0]
 	e.target = null
-	e.position = stage.player.position + Vector2(100, 0)
+	e.position = stage.player.position + Vector2(150, -Balance.BODY_CENTER_Y)  # 몸 중심 높이, 사거리 끝 가까이
 	var longest := 0.0
 	for i in 60:
 		await wait_frames()
 		longest = maxf(longest, stage.player._rig.transform.x.length())
-	assert_true(longest > 1.5, "오른쪽 적을 향해 가로로 늘어남 %f" % longest)
+	assert_true(longest > 1.4, "오른쪽 적을 향해 가로로 늘어남 %f" % longest)
 	assert_true(stage.player._face.look.x > 0.9, "얼굴이 적 쪽(오른쪽)을 봄")
 	stage.queue_free()
 

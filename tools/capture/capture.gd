@@ -1,9 +1,11 @@
 extends Node
 ## GIF 캡처용 장면 (게임에는 쓰이지 않음). 정해진 시나리오로 슬라임을 움직이고 공격시킨 뒤 끝낸다.
-## 사용: godot --path . --write-movie out.avi --fixed-fps 30 res://tools/capture/capture.tscn -- attack|turn
-## 그 뒤 ffmpeg로 avi를 GIF로 바꾼다 (tools/capture/README 없이 CLAUDE.md의 화면 확인 규칙을 따름).
+## 사용: godot --path . --write-movie out.avi --fixed-fps 60 res://tools/capture/capture.tscn -- attack [stretch|hop]
+##       (시나리오: attack = 적 3마리 차례로 덮치기, turn = 가만히→출발→방향 전환→멈춤)
+## 도트가 선명하게 찍히도록 실행 전에 프로젝트 폴더에 override.cfg(창 크기 덮어쓰기 해제)를 임시로 만들고, 끝나면 지운다 (tools/capture/run.sh).
+## 그 뒤 ffmpeg로 avi를 GIF로 바꾼다 (보통 속도는 30fps로 줄이고, 0.5배속은 60fps 프레임을 30fps로 틀어 만든다).
 
-const FPS := 30
+const FPS := 60
 var _scenario := "attack"
 var _frame := 0
 var _stage: Stage
@@ -14,6 +16,8 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() > 0:
 		_scenario = args[0]
+	if args.size() > 1:  # 덮치기 모양 안을 상수 대신 여기서 고른다
+		LungePose.style = Balance.STYLE_STRETCH if args[1] == "stretch" else Balance.STYLE_HOP
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
 	_stage = main.get_node("%Stage")
@@ -21,11 +25,13 @@ func _ready() -> void:
 	_stage.set_process(false)  # 자동 적 생성과 입력 대신 이 스크립트가 조종한다
 	for e in get_tree().get_nodes_in_group("enemies"):
 		e.queue_free()
-	# 시나리오: [시작 초, 동작]
+	# 시나리오: [시작 초, 동작, 값]. 적 위치는 몸 중심 기준 (사거리 190 안, 가장자리가 닿을 만큼)
+	var c := Vector2(0, -Balance.BODY_CENTER_Y)
 	if _scenario == "attack":
-		_timeline = [[0.3, "enemy", Vector2(110, -40)], [1.5, "enemy", Vector2(-100, 50)], [2.9, "enemy", Vector2(10, -105)]]
+		_timeline = [[0.3, "enemy", c + Vector2(180, 0)], [1.8, "enemy", c + Vector2(0, -170)], [3.3, "enemy", c + Vector2(-150, 40)]]
 	else:
-		_timeline = [[0.4, "move", Vector2.RIGHT], [1.2, "move", Vector2.UP], [2.0, "move", Vector2.LEFT], [2.8, "move", Vector2.DOWN], [3.6, "move", Vector2.ZERO]]
+		# 가만히 → 살짝 밀기 → 최고 속도 → 방향 전환 → 멈춤
+		_timeline = [[0.8, "move", Vector2.RIGHT * 0.3], [1.6, "move", Vector2.RIGHT], [2.5, "move", Vector2.UP], [3.3, "move", Vector2.LEFT], [4.1, "move", Vector2.ZERO]]
 
 
 func _process(_delta: float) -> void:
@@ -39,5 +45,5 @@ func _process(_delta: float) -> void:
 			else:
 				_stage.player.move_input = step[2]
 	_frame += 1
-	if t > (4.6 if _scenario == "turn" else 4.2):
+	if t > (5.8 if _scenario == "turn" else 5.0):
 		get_tree().quit()
